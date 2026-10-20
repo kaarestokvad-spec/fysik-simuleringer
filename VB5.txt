@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalorimeter V5B</title>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    background:#f4f6f8;
+    max-width:1300px;
+    margin:auto;
+    padding:20px;
+}
+
+h1{
+    text-align:center;
+}
+
+canvas{
+    border:1px solid #999;
+    background:white;
+    display:block;
+    margin:auto;
+}
+
+.controls{
+    margin-bottom:15px;
+}
+
+button,select{
+    padding:8px 12px;
+    margin-right:10px;
+}
+
+#tempDisplay{
+    text-align:center;
+    font-size:42px;
+    color:#004a80;
+    font-weight:bold;
+    margin-bottom:10px;
+}
+</style>
+</head>
+<body>
+
+<h1>Kalorimeterforsøg V5B</h1>
+
+<div class="controls">
+
+<select id="lodSelect">
+<option value="A">Lod A</option>
+<option value="B">Lod B</option>
+<option value="C">Lod C</option>
+<option value="D">Lod D</option>
+</select>
+
+<select id="materialSelect">
+<option value="jern">Jern</option>
+<option value="messing">Messing</option>
+<option value="bly">Bly</option>
+<option value="ukendt">Prøve A</option>
+</select>
+
+<button onclick="toggleColdWater()">
+Koldt vand (10°C)
+</button>
+
+<button onclick="toggleHotWater()">
+Varmt vand (23°C)
+</button>
+
+<button onclick="heatMetal()">
+Opvarm lod
+</button>
+
+<button onclick="startHeatTransfer()">
+Start varmeoverførsel
+</button>
+
+<button onclick="resetExperiment()">
+Start forfra
+</button>
+
+</div>
+
+<div id="tempDisplay">---</div>
+
+<canvas id="canvas" width="1100" height="650"></canvas>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const cp = {
+    jern:0.45,
+    messing:0.38,
+    bly:0.13,
+    ukendt:0.30
+};
+
+const masses = {
+    A:50,
+    B:100,
+    C:200,
+    D:300
+};
+
+const sizes = {
+    A:20,
+    B:30,
+    C:40,
+    D:50
+};
+
+let waterMass;
+let cupMass;
+let waterTemp;
+let currentTemp;
+let targetTemp;
+
+let roomTemp = 20;
+
+let hotWaterRunning = false;
+let coldWaterRunning = false;
+
+let hotWaterMass = 0;
+let coldWaterMass = 0;
+
+function toggleColdWater(){
+
+    coldWaterRunning =
+        !coldWaterRunning;
+
+    if(coldWaterRunning){
+
+        hotWaterRunning = false;
+    }
+}
+
+function toggleHotWater(){
+
+    hotWaterRunning =
+        !hotWaterRunning;
+
+    if(hotWaterRunning){
+
+        coldWaterRunning = false;
+    }
+}
+
+let mixing = false;
+
+let dragObject = null;
+
+let metalHot = false;
+
+const scale = {
+    x:650,
+    y:500,
+    width:200
+};
+
+let displayMass = 0;
+
+const pot = {
+    x:180,
+    y:170,
+    width:220,
+    height:150
+};
+
+const cup = {
+    x:850,
+    y:300,
+    width:120,
+    height:220
+};
+
+const metal = {
+    x:180,
+    y:420,
+    size:20
+};
+
+const thermometer = {
+    x:980,
+    y:120,
+    reading:20
+};
+
+function resetExperiment(){
+
+    cupMass = 6 + Math.random()*4;
+
+    waterMass = 0;
+
+hotWaterMass = 0;
+coldWaterMass = 0;
+
+hotWaterRunning = false;
+coldWaterRunning = false;
+
+waterTemp = 20;
+
+    currentTemp = waterTemp;
+
+    targetTemp = waterTemp;
+
+    mixing = false;
+
+    metalHot = false;
+
+    metal.x = 180;
+    metal.y = 420;
+
+    cup.x = 850;
+    cup.y = 300;
+
+    thermometer.x = 980;
+    thermometer.y = 120;
+
+    thermometer.reading = waterTemp;
+}
+
+resetExperiment();
+
+function toggleWater(){
+    waterRunning=!waterRunning;
+}
+
+function heatMetal(){
+
+    metalHot=true;
+}
+
+function startHeatTransfer(){
+
+    if(waterMass<1) return;
+
+    let cpMetal =
+        cp[
+        document.getElementById(
+        "materialSelect").value];
+
+    let mMetal =
+        masses[
+        document.getElementById(
+        "lodSelect").value];
+
+    targetTemp =
+    (
+        waterMass*4.18*waterTemp
+        +
+        mMetal*cpMetal*100
+    )
+    /
+    (
+        waterMass*4.18
+        +
+        mMetal*cpMetal
+    );
+
+    mixing = true;
+}
+
+document.getElementById(
+"lodSelect")
+.addEventListener(
+"change",
+()=>{
+metal.size=
+sizes[
+document.getElementById(
+"lodSelect").value];
+});
+
+metal.size=20;
+
+canvas.addEventListener(
+"mousedown",
+e=>{
+
+let r=canvas.getBoundingClientRect();
+
+let x=e.clientX-r.left;
+let y=e.clientY-r.top;
+
+if(
+x>metal.x-metal.size &&
+x<metal.x+metal.size &&
+y>metal.y-metal.size &&
+y<metal.y+metal.size){
+
+dragObject=metal;
+}
+else
+if(
+x>cup.x-60 &&
+x<cup.x+60 &&
+y>cup.y-110 &&
+y<cup.y+110){
+
+dragObject=cup;
+}
+else
+if(
+Math.abs(x-thermometer.x)<20 &&
+Math.abs(y-thermometer.y)<140){
+
+dragObject=thermometer;
+}
+});
+
+canvas.addEventListener(
+"mousemove",
+e=>{
+
+if(!dragObject)return;
+
+let r=canvas.getBoundingClientRect();
+
+dragObject.x=
+e.clientX-r.left;
+
+dragObject.y=
+e.clientY-r.top;
+});
+
+window.addEventListener(
+"mouseup",
+()=>{
+dragObject=null;
+});
+
+function cupOnScale(){
+
+return(
+cup.x>
+scale.x &&
+cup.x<
+scale.x+scale.width &&
+Math.abs(
+(cup.y+110)-500
+)<30
+);
+}
+
+function metalOnScale(){
+
+return(
+metal.x>
+scale.x &&
+metal.x<
+scale.x+scale.width &&
+Math.abs(
+(metal.y+metal.size/2)-500
+)<20
+);
+}
+
+function trueMass(){
+
+let m=0;
+
+if(cupOnScale()){
+
+m+=cupMass+waterMass;
+}
+
+if(metalOnScale()){
+
+m+=masses[
+document.getElementById(
+"lodSelect").value];
+}
+
+return m;
+}
+
+function drawScale(){
+
+ctx.fillStyle="#666";
+ctx.fillRect(650,500,220,60);
+
+ctx.fillStyle="#cfffff";
+ctx.fillRect(665,515,190,30);
+
+displayMass +=
+(trueMass()-displayMass)
+*0.15;
+
+ctx.fillStyle="black";
+ctx.font="26px monospace";
+
+ctx.fillText(
+displayMass.toFixed(1)
++" g",
+690,
+538
+);
+
+ctx.fillStyle="#999";
+ctx.fillRect(
+680,
+470,
+160,
+20
+);
+}
+
+function drawCup(){
+
+let left=
+cup.x-60;
+
+let top=
+cup.y-110;
+
+ctx.strokeStyle="#444";
+ctx.lineWidth=4;
+
+ctx.beginPath();
+
+ctx.moveTo(left+10,top);
+ctx.lineTo(left,top+220);
+ctx.lineTo(left+120,top+220);
+ctx.lineTo(left+110,top);
+
+ctx.stroke();
+
+ctx.fillStyle="#f5f5f5";
+ctx.fillRect(left+10,top-10,100,10);
+
+ctx.beginPath();
+ctx.arc(cup.x,top-5,5,0,2*Math.PI);
+ctx.fillStyle="black";
+ctx.fill();
+
+if(waterMass>0){
+
+let level=
+top+220-waterMass*0.7;
+
+ctx.fillStyle="#71cfff";
+ctx.fillRect(
+left+5,
+level,
+110,
+(top+220)-level
+);
+}
+}
+
+function drawFaucet(){
+
+    let x = cup.x;
+
+    let y = cup.y - 260;
+
+    // kold hane
+
+    ctx.fillStyle =
+        "#3399ff";
+
+    ctx.fillRect(
+        x-60,
+        y,
+        20,
+        40
+    );
+
+    // varm hane
+
+    ctx.fillStyle =
+        "#ff6666";
+
+    ctx.fillRect(
+        x+40,
+        y,
+        20,
+        40
+    );
+
+    // rør
+
+    ctx.fillStyle =
+        "#888";
+
+    ctx.fillRect(
+        x-10,
+        y+20,
+        20,
+        60
+    );
+
+    if(coldWaterRunning){
+
+        ctx.strokeStyle =
+            "#3399ff";
+
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x-50,
+            y+40
+        );
+
+        ctx.lineTo(
+            x-50,
+            cup.y-40
+        );
+
+        ctx.stroke();
+    }
+
+    if(hotWaterRunning){
+
+        ctx.strokeStyle =
+            "#ff6666";
+
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x+50,
+            y+40
+        );
+
+        ctx.lineTo(
+            x+50,
+            cup.y-40
+        );
+
+        ctx.stroke();
+    }
+}
+
+function drawPot(){
+
+ctx.fillStyle="#666";
+
+ctx.fillRect(
+pot.x-pot.width/2,
+pot.y-pot.height/2,
+pot.width,
+pot.height
+);
+
+ctx.fillStyle="#71cfff";
+
+ctx.fillRect(
+pot.x-pot.width/2,
+pot.y,
+pot.width,
+50
+);
+
+ctx.fillStyle="black";
+ctx.fillText(
+"100°C",
+pot.x-20,
+pot.y-90
+);
+}
+
+function drawMetal(){
+
+ctx.fillStyle=
+metalHot ? "#ff8844" : "#777";
+
+ctx.fillRect(
+metal.x-metal.size/2,
+metal.y-metal.size/2,
+metal.size,
+metal.size
+);
+}
+
+function drawThermometer(){
+
+ctx.strokeStyle="red";
+ctx.lineWidth=8;
+
+ctx.beginPath();
+ctx.moveTo(
+thermometer.x,
+thermometer.y);
+
+ctx.lineTo(
+thermometer.x,
+thermometer.y+120);
+
+ctx.stroke();
+
+ctx.beginPath();
+ctx.arc(
+thermometer.x,
+thermometer.y+135,
+15,
+0,
+2*Math.PI
+);
+
+ctx.fillStyle="red";
+ctx.fill();
+}
+
+function animate(){
+
+if(coldWaterRunning){
+
+    coldWaterMass += 0.4;
+
+    if(
+        coldWaterMass +
+        hotWaterMass > 250
+    ){
+
+        coldWaterRunning = false;
+    }
+}
+
+if(hotWaterRunning){
+
+    hotWaterMass += 0.4;
+
+    if(
+        coldWaterMass +
+        hotWaterMass > 250
+    ){
+
+        hotWaterRunning = false;
+    }
+}
+
+waterMass =
+    coldWaterMass +
+    hotWaterMass;
+
+if(waterMass > 0){
+
+    waterTemp =
+
+    (
+        coldWaterMass * 10 +
+        hotWaterMass * 23
+    )
+
+    /
+
+    waterMass;
+
+    if(!mixing){
+
+        currentTemp =
+            waterTemp;
+    }
+}
+
+
+if(mixing){
+
+currentTemp +=
+(targetTemp-currentTemp)
+*0.01;
+
+currentTemp -=
+(currentTemp-roomTemp)
+*0.0015;
+}
+
+let immersed =
+
+thermometer.x>
+cup.x-60 &&
+
+thermometer.x<
+cup.x+60 &&
+
+thermometer.y+135>
+cup.y-80 &&
+
+thermometer.y+135<
+cup.y+100 &&
+
+waterMass>0;
+
+if(immersed){
+
+thermometer.reading +=
+(currentTemp-
+thermometer.reading)
+*0.005;
+
+document
+.getElementById(
+"tempDisplay")
+.textContent=
+thermometer.reading
+.toFixed(1)
++" °C";
+}
+else{
+
+document
+.getElementById(
+"tempDisplay")
+.textContent="---";
+}
+
+ctx.clearRect(
+0,0,
+canvas.width,
+canvas.height);
+
+drawPot();
+drawScale();
+drawCup();
+drawFaucet();
+drawMetal();
+drawThermometer();
+
+requestAnimationFrame(
+animate);
+}
+
+animate();
+
+</script>
+
+</body>
+</html>
